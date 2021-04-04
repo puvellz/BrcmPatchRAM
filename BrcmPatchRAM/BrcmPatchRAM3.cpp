@@ -819,7 +819,7 @@ bool BrcmPatchRAM::performUpgrade()
                 
                 // Write first instruction to trigger response
                 if ((data = OSDynamicCast(OSData, iterator->getNextObject())))
-                    bulkWrite(data->getBytesNoCopy(), data->getLength());
+                    hciCommand((void*)(data->getBytesNoCopy()), data->getLength());
                 break;
                 
             case kInstructionWrite:
@@ -829,7 +829,7 @@ bool BrcmPatchRAM::performUpgrade()
                     continue;
                 }
                 
-                if ((data = OSDynamicCast(OSData, iterator->getNextObject()))) {
+                hciCommand((void*)(data->getBytesNoCopy()), data->getLength());
                     bulkWrite(data->getBytesNoCopy(), data->getLength());
                 } else {
                     // Firmware data fully written
