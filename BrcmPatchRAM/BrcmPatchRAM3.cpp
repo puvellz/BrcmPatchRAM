@@ -819,7 +819,26 @@ bool BrcmPatchRAM::performUpgrade()
                 
                 // Write first instruction to trigger response
                 if ((data = OSDynamicCast(OSData, iterator->getNextObject())))
-                    bulkWrite(data->getBytesNoCopy(), data->getLength());
+             case kMiniDriverComplete:
+                // Should never happen, but semantically causes a leak.
+                OSSafeReleaseNULL(iterator);
+                // Write firmware data to bulk pipe
+                iterator = OSCollectionIterator::withCollection(instructions);
+                
+                if (!iterator) {
+                    mDeviceState = kUpdateAborted;
+                    continue;
+                }
+                // If this IOSleep is not issued, the device is not ready to receive
+                // the firmware instructions and we will deadlock due to lack of
+                // responses.
+                IOSleep(mInitialDelay);
+                
+                // Write first instruction to trigger response
+                if ((data = OSDynamicCast(OSData, iterator->getNextObject()))){
+                    //changed from bulkWrite
+                    hciCommand((void*)(data->getBytesNoCopy()), data->getLength());
+                }
                 break;
                 
             case kInstructionWrite:
@@ -830,7 +849,17 @@ bool BrcmPatchRAM::performUpgrade()
                 }
                 
                 if ((data = OSDynamicCast(OSData, iterator->getNextObject()))) {
-                    bulkWrite(data->getBytesNoCopy(), data->getLength());
+                    //changed from bulkWrite
+                    hciCommand((void*)(data->getBytesNoCopy()), data->getLength());
+                } else {
+                    // Firmware data fully written
+                    if (hciCommand(&HCI_VSC_END_OF_RECORD, sizeof(HCI_VSC_END_OF_RECORD)) != kIOReturnSuccess) {
+                        DebugLog("HCI_VSC_END_OF_RECORD failed, aborting.");
+                        mDeviceState = kUpdateAborted;
+                        continue;
+                    }
+                }
+                break;
                 } else {
                     // Firmware data fully written
                     if (hciCommand(&HCI_VSC_END_OF_RECORD, sizeof(HCI_VSC_END_OF_RECORD)) != kIOReturnSuccess) {
